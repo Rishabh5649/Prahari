@@ -1,0 +1,14 @@
+fastapi
+uvicorn[standard]
+sqlalchemy[asyncio]
+asyncpg
+alembic
+pdfplumber
+httpx
+anthropic
+python-multipart
+python-dotenv
+minio
+pydantic-settings
+psycopg2-binary
+google-genai
