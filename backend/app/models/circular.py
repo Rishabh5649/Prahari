@@ -10,14 +10,16 @@ from app.core.database import Base
 
 
 class CircularStatus(str):
+    QUEUED = "queued"
     PROCESSING = "processing"
     IN_PROGRESS = "in_progress"
     COMPLIANT = "compliant"
     OVERDUE = "overdue"
+    FAILED = "failed"
 
 
 CIRCULAR_STATUS_ENUM = Enum(
-    "processing", "in_progress", "compliant", "overdue",
+    "queued", "processing", "in_progress", "compliant", "overdue", "failed",
     name="circular_status",
     create_constraint=True,
 )

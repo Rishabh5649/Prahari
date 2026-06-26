@@ -289,6 +289,7 @@ async def get_system_stats(
         func.count().label("total_circulars"),
         func.count().filter(Circular.status == "compliant").label("compliant_circulars"),
         func.count().filter(Circular.status == "overdue").label("overdue_circulars"),
+        func.count().filter(Circular.status == "failed").label("failed_circulars"),
     ).select_from(Circular)
     circ_row = (await db.execute(circ_stmt)).one()
 
@@ -305,8 +306,9 @@ async def get_system_stats(
         total_circulars=circ_row.total_circulars,
         compliant_circulars=circ_row.compliant_circulars,
         overdue_circulars=circ_row.overdue_circulars,
+        failed_circulars=circ_row.failed_circulars,
         total_maps=map_row.total_maps,
         maps_pending_review=map_row.pending_review_maps,
-        maps_satisfied=map_row.satisfied_maps,
-        maps_overdue=map_row.overdue_maps,
+        satisfied_maps=map_row.satisfied_maps,
+        overdue_maps=map_row.overdue_maps,
     )

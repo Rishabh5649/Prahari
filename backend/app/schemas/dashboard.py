@@ -124,6 +124,7 @@ class SystemStats(BaseModel):
     total_circulars: int
     compliant_circulars: int
     overdue_circulars: int
+    failed_circulars: int
     total_maps: int
     maps_pending_review: int
     maps_satisfied: int
