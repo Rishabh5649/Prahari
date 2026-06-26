@@ -1,5 +1,6 @@
 """Routing service — keyword-based MAP routing with LLM fallback and splitting."""
 
+import asyncio
 import json
 import logging
 import re
@@ -14,7 +15,7 @@ from app.models.map_item import MapItem
 
 logger = logging.getLogger(__name__)
 
-MODEL = "claude-sonnet-4-6"
+# MODEL removed here, now using settings.MODEL
 
 DEPARTMENT_KEYWORDS: dict[str, list[str]] = {
     "IT-Security": [
@@ -88,7 +89,7 @@ async def _llm_fallback(map_item: MapItem) -> tuple[str, str]:
 
     try:
         response = await client.messages.create(
-            model=MODEL,
+            model=settings.MODEL,
             max_tokens=256,
             system=system,
             messages=[{"role": "user", "content": user_msg}],
@@ -145,7 +146,7 @@ async def route_map(map_item: MapItem, db: AsyncSession) -> MapItem:
                 "what": map_item.what,
                 "evidence_type": map_item.evidence_type,
             },
-            model_version=MODEL,
+            model_version=settings.MODEL,
             actor="system",
         )
         db.add(fallback_audit)
@@ -213,13 +214,29 @@ async def route_map(map_item: MapItem, db: AsyncSession) -> MapItem:
             return map_item
 
         else:
-            # Three-or-more way tie — keep extractor's original department
+            # Three-or-more way tie — call LLM fallback instead of silent fall-through
             logger.info(
-                "Multi-way tie (%d depts) for MAP %s, keeping extractor department '%s'",
+                "Multi-way tie (%d depts) for MAP %s, calling LLM fallback",
                 len(top_depts),
                 map_item.id,
-                map_item.department,
             )
+            department, reason = await _llm_fallback(map_item)
+            map_item.department = department
+            method = "llm_fallback_tie"
+
+            fallback_audit = AuditLog(
+                event_type="map_routed_llm_fallback",
+                entity_type="map_item",
+                entity_id=str(map_item.id),
+                payload={
+                    "department": department,
+                    "reason": f"Multi-way tie fallback: {reason}",
+                    "top_depts": top_depts,
+                },
+                model_version=settings.MODEL,
+                actor="system",
+            )
+            db.add(fallback_audit)
 
     # ---- General routing audit log ----
     route_audit = AuditLog(
@@ -239,14 +256,20 @@ async def route_map(map_item: MapItem, db: AsyncSession) -> MapItem:
     return map_item
 
 
+import asyncio
+
 async def route_all_maps(
     circular: Circular,
     maps: list[MapItem],
     db: AsyncSession,
 ) -> None:
-    """Route every MAP from a circular to the appropriate department.
+    """Route every MAP from a circular to the appropriate department concurrently.
 
     Called automatically after extract_maps in the ingest pipeline.
     """
-    for map_item in maps:
-        await route_map(map_item, db)
+    tasks = [route_map(map_item, db) for map_item in maps]
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+    
+    for map_item, result in zip(maps, results):
+        if isinstance(result, Exception):
+            logger.error("Failed to route MAP %s: %s", map_item.id, result)

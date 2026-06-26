@@ -9,8 +9,7 @@ import json
 import logging
 from io import BytesIO
 
-from google import genai
-from google.genai import types
+import anthropic
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -29,7 +28,7 @@ from app.utils.hashing import hash_content
 
 logger = logging.getLogger(__name__)
 
-MODEL = "gemini-2.5-flash"
+# MODEL removed here, now using settings.MODEL
 
 SYSTEM_PROMPT = (
     "You are an independent compliance auditor for an Indian bank. You have NO "
@@ -95,8 +94,8 @@ async def _extract_evidence_text(evidence: EvidenceSubmission) -> str:
         return f"[Error reading evidence file: {str(e)}]"
 
 
-async def _call_gemini(user_message: str, retry: bool = False) -> dict:
-    """Call the Google Gemini API and parse the JSON response.
+async def _call_anthropic(user_message: str, retry: bool = False) -> dict:
+    """Call the Anthropic API and parse the JSON response.
 
     Args:
         user_message: The user-role message containing requirement and evidence.
@@ -105,22 +104,18 @@ async def _call_gemini(user_message: str, retry: bool = False) -> dict:
     Returns:
         Parsed verdict dictionary with verdict, reasoning, and gaps.
     """
-    client = genai.Client(api_key=settings.GEMINI_API_KEY)
+    client = anthropic.AsyncAnthropic(api_key=settings.ANTHROPIC_API_KEY)
 
     system = SYSTEM_PROMPT if not retry else SYSTEM_PROMPT + RETRY_SUFFIX
 
-    response = await client.aio.models.generate_content(
-        model=MODEL,
-        contents=user_message,
-        config=types.GenerateContentConfig(
-            system_instruction=system,
-            max_output_tokens=2048,
-            response_mime_type="application/json",
-            response_schema=JudgeVerdictSchema,
-        ),
+    response = await client.messages.create(
+        model=settings.MODEL,
+        max_tokens=2048,
+        system=system,
+        messages=[{"role": "user", "content": user_message}],
     )
 
-    raw_text = response.text.strip()
+    raw_text = response.content[0].text.strip()
 
     # Handle responses wrapped in markdown code fences
     if raw_text.startswith("```"):
@@ -129,6 +124,9 @@ async def _call_gemini(user_message: str, retry: bool = False) -> dict:
         inside = False
         for line in lines:
             if line.startswith("```") and not inside:
+                if "json" in line.lower():
+                    inside = True
+                    continue
                 inside = True
                 continue
             elif line.startswith("```") and inside:
@@ -139,6 +137,8 @@ async def _call_gemini(user_message: str, retry: bool = False) -> dict:
 
     return json.loads(raw_text)
 
+
+MAX_EVIDENCE_CHARS = 6000
 
 async def judge_evidence(
     map_item: MapItem,
@@ -161,7 +161,17 @@ async def judge_evidence(
     """
     evidence_text = await _extract_evidence_text(evidence)
 
-    # Cap at 6000 chars to stay within safe context limits
+    # Log warning if truncation occurrs
+    original_len = len(evidence_text)
+    if original_len > MAX_EVIDENCE_CHARS:
+        logger.warning(
+            "Evidence for MAP %s truncated from %d to %d chars",
+            map_item.id,
+            original_len,
+            MAX_EVIDENCE_CHARS
+        )
+
+    # Cap at MAX_EVIDENCE_CHARS to stay within safe context limits
     # Full text stored in evidence_submissions, not truncated at rest
     user_message = (
         f"REQUIREMENT:\n"
@@ -174,17 +184,17 @@ async def judge_evidence(
         f"Submitted by: {evidence.submitted_by}\n"
         f"Date: {evidence.submitted_at.isoformat()}\n\n"
         f"Evidence Content:\n"
-        f"{evidence_text[:6000]}"
+        f"{evidence_text[:MAX_EVIDENCE_CHARS]}"
     )
 
     # First attempt
     try:
-        verdict_data = await _call_gemini(user_message)
+        verdict_data = await _call_anthropic(user_message)
     except (json.JSONDecodeError, Exception) as exc:
         logger.warning(
             "First judge LLM call failed (%s), retrying with stricter prompt…", exc
         )
-        verdict_data = await _call_gemini(user_message, retry=True)
+        verdict_data = await _call_anthropic(user_message, retry=True)
 
     verdict = verdict_data["verdict"]
     reasoning = verdict_data["reasoning"]
@@ -224,7 +234,7 @@ async def judge_evidence(
         },
         input_hash=hash_content(evidence_text),
         output_hash=hash_content(json.dumps(output_payload, sort_keys=True)),
-        model_version=MODEL,
+        model_version=settings.MODEL,
         actor="system",
     )
     db.add(audit)
