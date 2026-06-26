@@ -34,20 +34,19 @@ def stream_minio_object(bucket: str, key: str):
         response.release_conn()
 
 
+from app.api.deps import validate_upload
+
 @router.post("/submit", response_model=EvidenceSubmitResponse)
 async def submit_evidence_endpoint(
     map_id: UUID = Form(..., description="UUID of the MAP item"),
     submitted_by: str = Form(..., description="Officer name or email"),
+    file_data: bytes = Depends(validate_upload),
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
 ):
     """Upload evidence for a MAP item."""
-    if file.size and file.size > MAX_EVIDENCE_SIZE:
-        raise HTTPException(status_code=413, detail="File exceeds 20 MB limit")
-
-    file_data = await file.read()
-    if len(file_data) > MAX_EVIDENCE_SIZE:
-        raise HTTPException(status_code=413, detail="File exceeds 20 MB limit")
+    # Size check is now handled by validate_upload
+    file_name = file.filename or "unnamed"
 
     file_name = file.filename or "unnamed"
 

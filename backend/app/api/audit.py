@@ -15,7 +15,13 @@ from app.core.database import get_db
 from app.models.audit_log import AuditLog
 from app.schemas.audit import AuditLogPage, AuditLogResponse
 
-router = APIRouter(prefix="/api/audit", tags=["Audit"])
+from app.api.deps import verify_api_key
+
+router = APIRouter(
+    prefix="/api/audit",
+    tags=["Audit"],
+    dependencies=[Depends(verify_api_key)]
+)
 
 # ──────────────────────────── helpers ────────────────────────────
 

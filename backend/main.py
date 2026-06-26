@@ -65,12 +65,21 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# ---------------------------------------------------------------------------
-# CORS — allow the React frontend on localhost:3000 and localhost:5173 (Vite)
-# ---------------------------------------------------------------------------
+from app.core.config import settings
+
+# --- existing imports ---
+
+# ... (rest of the file)
+
+# CORS — allow origins from settings
+origins = settings.CORS_ORIGINS
+
+if not origins:
+    raise RuntimeError("CORS_ORIGINS cannot be empty in production.")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:5173"],
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
