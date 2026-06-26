@@ -16,6 +16,36 @@ import ConfidencePill from '@/components/ConfidencePill';
 import { getStats, getCirculars } from '@/api/dashboard';
 import { getPendingReviewMaps, approveMap, rejectMap } from '@/api/maps';
 
+// In-memory cache for dashboard data
+const dashboardCache = new Map();
+const CACHE_TTL = 30000; // 30 seconds
+
+const getCachedData = (key) => {
+  const cached = dashboardCache.get(key);
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+    return cached.data;
+  }
+  return null;
+};
+
+const setCachedData = (key, data) => {
+  dashboardCache.set(key, { data, timestamp: Date.now() });
+};
+
+const getCircularLabel = (m) => {
+  if (m.circular_title) {
+    return m.circular_title.length > 40 ? m.circular_title.slice(0, 40) + '...' : m.circular_title;
+  }
+  if (m.circular_source_url) {
+    try {
+      return new URL(m.circular_source_url).hostname;
+    } catch {
+      /* fallback */
+    }
+  }
+  return 'Circular ' + m.circular_id.slice(0, 6);
+};
+
 export default function Dashboard() {
   const [stats, setStats] = useState(null);
   const [circulars, setCirculars] = useState([]);
@@ -31,6 +61,14 @@ export default function Dashboard() {
   const [rejectReason, setRejectReason] = useState('');
 
   const fetchDashboard = async () => {
+    const cached = getCachedData('fetchDashboard');
+    if (cached) {
+      setStats(cached.stats);
+      setCirculars(cached.circulars);
+      setLoading(false);
+      return;
+    }
+
     try {
       setLoading(true);
       const [statsData, circularsData] = await Promise.all([getStats(), getCirculars()]);
@@ -50,6 +88,7 @@ export default function Dashboard() {
       });
 
       setCirculars(sortedCirculars);
+      setCachedData('fetchDashboard', { stats: statsData, circulars: sortedCirculars });
     } catch (err) {
       console.error(err);
       setError('Failed to load dashboard data. Please make sure the backend is running.');
@@ -59,10 +98,17 @@ export default function Dashboard() {
   };
 
   const fetchPendingMaps = async () => {
+    const cached = getCachedData('fetchPendingMaps');
+    if (cached) {
+      setPendingMaps(cached);
+      return;
+    }
+
     setPendingLoading(true);
     try {
       const maps = await getPendingReviewMaps();
       setPendingMaps(maps);
+      setCachedData('fetchPendingMaps', maps);
     } catch {
       /* silently fail — section just stays empty */
     } finally {
@@ -315,7 +361,7 @@ export default function Dashboard() {
                           to={`/circular/${m.circular_id}`}
                           className="hover:underline text-zinc-700 font-medium"
                         >
-                          {m.circular_id.slice(0, 8)}...
+                          {getCircularLabel(m)}
                         </Link>
                       </TableCell>
                       <TableCell>
