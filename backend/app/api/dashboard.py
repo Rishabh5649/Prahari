@@ -309,6 +309,6 @@ async def get_system_stats(
         failed_circulars=circ_row.failed_circulars,
         total_maps=map_row.total_maps,
         maps_pending_review=map_row.pending_review_maps,
-        satisfied_maps=map_row.satisfied_maps,
-        overdue_maps=map_row.overdue_maps,
+        maps_satisfied=map_row.satisfied_maps,
+        maps_overdue=map_row.overdue_maps,
     )

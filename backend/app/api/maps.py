@@ -5,7 +5,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import selectinload, joinedload
 
 from app.core.database import get_db
 from app.models.audit_log import AuditLog
@@ -36,6 +36,8 @@ def _map_to_response(m: MapItem) -> MapItemResponse:
         status=m.status,
         created_at=m.created_at,
         updated_at=m.updated_at,
+        circular_title=m.circular.title if m.circular else None,
+        circular_source_url=m.circular.source_url if m.circular else None,
     )
 
 
@@ -47,7 +49,7 @@ async def list_maps(
     db: AsyncSession = Depends(get_db),
 ):
     """List all MAP items with optional filters."""
-    query = select(MapItem)
+    query = select(MapItem).options(joinedload(MapItem.circular))
 
     if circular_id:
         query = query.where(MapItem.circular_id == circular_id)
@@ -73,6 +75,7 @@ async def get_map_detail(
         select(MapItem)
         .where(MapItem.id == map_id)
         .options(
+            joinedload(MapItem.circular),
             selectinload(MapItem.evidence_submissions),
             selectinload(MapItem.judgments),
             selectinload(MapItem.children),
@@ -95,6 +98,8 @@ async def get_map_detail(
         status=map_item.status,
         created_at=map_item.created_at,
         updated_at=map_item.updated_at,
+        circular_title=map_item.circular.title if map_item.circular else None,
+        circular_source_url=map_item.circular.source_url if map_item.circular else None,
         evidence_submissions=[
             EvidenceBrief(
                 id=str(e.id),

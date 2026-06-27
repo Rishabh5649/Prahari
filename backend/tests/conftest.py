@@ -21,6 +21,7 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 # 1. Mock minio_client and anthropic BEFORE importing any app code
+import app.core.minio_client
 mock_minio = MagicMock()
 
 # Patch MinIO client and direct client initialisation

@@ -19,6 +19,8 @@ class MapItemResponse(BaseModel):
     status: str
     created_at: datetime
     updated_at: datetime | None = None
+    circular_title: str | None = None
+    circular_source_url: str | None = None
 
     class Config:
         from_attributes = True
@@ -63,6 +65,8 @@ class MapDetailResponse(BaseModel):
     status: str
     created_at: datetime
     updated_at: datetime | None = None
+    circular_title: str | None = None
+    circular_source_url: str | None = None
     evidence_submissions: list[EvidenceBrief] = []
     judgments: list[JudgmentBrief] = []
     children: list[MapItemResponse] = []
