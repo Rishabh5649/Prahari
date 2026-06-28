@@ -178,8 +178,8 @@ async def approve_map(
             db.add(audit_child)
 
     await db.flush()
-    await db.refresh(map_item)
-
+    stmt = select(MapItem).where(MapItem.id == map_item.id).options(joinedload(MapItem.circular))
+    map_item = (await db.execute(stmt)).scalar_one()
     return _map_to_response(map_item)
 
 
@@ -240,8 +240,8 @@ async def reject_map(
             db.add(audit_child)
 
     await db.flush()
-    await db.refresh(map_item)
-
+    stmt = select(MapItem).where(MapItem.id == map_item.id).options(joinedload(MapItem.circular))
+    map_item = (await db.execute(stmt)).scalar_one()
     return _map_to_response(map_item)
 
 
@@ -297,7 +297,7 @@ async def update_map_status(
             elif any_overdue:
                 parent.status = "overdue"
             else:
-                parent.status = "in_progress"
+                parent.status = "assigned"
 
     # Recalculate circular status
     circ_result = await db.execute(
@@ -319,7 +319,7 @@ async def update_map_status(
                 circ.status = "in_progress"
 
     await db.flush()
-    await db.refresh(map_item)
-
+    stmt = select(MapItem).where(MapItem.id == map_item.id).options(joinedload(MapItem.circular))
+    map_item = (await db.execute(stmt)).scalar_one()
     return _map_to_response(map_item)
 

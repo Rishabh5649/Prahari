@@ -1,7 +1,10 @@
-"""Alembic environment configuration for async SQLAlchemy."""
-
 import asyncio
+import os
+import sys
 from logging.config import fileConfig
+
+# Add parent directory to sys.path to resolve 'app' imports when running alembic from CLI
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from alembic import context
 from sqlalchemy import pool

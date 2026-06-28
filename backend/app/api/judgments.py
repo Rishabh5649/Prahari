@@ -158,6 +158,7 @@ async def override_existing_judgment(
     )
     db.add(audit)
     await db.flush()
+    await db.refresh(new_judgment)
 
     # 6. Return the new judgment object
     return new_judgment

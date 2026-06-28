@@ -43,17 +43,26 @@ def parse_pdf_bytes(data: bytes) -> str:
     Returns:
         Concatenated text from all pages.
     """
+    import os
     pages_text: list[str] = []
-    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
-        tmp.write(data)
-        tmp.flush()
-        tmp_path = tmp.name
+    tmp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+            tmp.write(data)
+            tmp.flush()
+            tmp_path = tmp.name
 
-    with pdfplumber.open(tmp_path) as pdf:
-        for page in pdf.pages:
-            text = page.extract_text()
-            if text:
-                pages_text.append(text)
+        with pdfplumber.open(tmp_path) as pdf:
+            for page in pdf.pages:
+                text = page.extract_text()
+                if text:
+                    pages_text.append(text)
+    finally:
+        if tmp_path and os.path.exists(tmp_path):
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
 
     return "\n\n".join(pages_text)
 

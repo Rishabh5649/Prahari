@@ -72,7 +72,7 @@ async def _llm_fallback(map_item: MapItem) -> tuple[str, str]:
     Returns:
         Tuple of (department, reason).
     """
-    client = genai.Client(api_key=settings.GEMINI_API_KEY)
+    client = genai.Client(api_key=settings.GEMINI_API_KEY or None)
 
     system = (
         "You are a bank org chart specialist. Given a compliance action item, "
@@ -97,6 +97,14 @@ async def _llm_fallback(map_item: MapItem) -> tuple[str, str]:
             ),
         )
         raw = response.text.strip()
+        if raw.startswith("```"):
+            lines = raw.splitlines()
+            json_lines: list[str] = []
+            for line in lines:
+                if not line.strip().startswith("```"):
+                    json_lines.append(line)
+            raw = "\n".join(json_lines).strip()
+            
         parsed = json.loads(raw)
         dept = parsed["department"]
         reason = parsed.get("reason", "")
@@ -258,20 +266,17 @@ async def route_map(map_item: MapItem, db: AsyncSession) -> MapItem:
     return map_item
 
 
-import asyncio
-
 async def route_all_maps(
     circular: Circular,
     maps: list[MapItem],
     db: AsyncSession,
 ) -> None:
-    """Route every MAP from a circular to the appropriate department concurrently.
+    """Route every MAP from a circular to the appropriate department sequentially.
 
     Called automatically after extract_maps in the ingest pipeline.
     """
-    tasks = [route_map(map_item, db) for map_item in maps]
-    results = await asyncio.gather(*tasks, return_exceptions=True)
-    
-    for map_item, result in zip(maps, results):
-        if isinstance(result, Exception):
-            logger.error("Failed to route MAP %s: %s", map_item.id, result)
+    for map_item in maps:
+        try:
+            await route_map(map_item, db)
+        except Exception as exc:
+            logger.error("Failed to route MAP %s: %s", map_item.id, exc)

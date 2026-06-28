@@ -80,7 +80,7 @@ async def _call_gemini(user_message: str, retry: bool = False) -> list[dict]:
     Returns:
         Parsed list of MAP dictionaries.
     """
-    client = genai.Client(api_key=settings.GEMINI_API_KEY)
+    client = genai.Client(api_key=settings.GEMINI_API_KEY or None)
 
     system = SYSTEM_PROMPT if not retry else SYSTEM_PROMPT + RETRY_SUFFIX
 

@@ -105,7 +105,7 @@ async def _call_gemini(user_message: str, retry: bool = False) -> dict:
     Returns:
         Parsed verdict dictionary with verdict, reasoning, and gaps.
     """
-    client = genai.Client(api_key=settings.GEMINI_API_KEY)
+    client = genai.Client(api_key=settings.GEMINI_API_KEY or None)
 
     system = SYSTEM_PROMPT if not retry else SYSTEM_PROMPT + RETRY_SUFFIX
 
@@ -241,6 +241,7 @@ async def judge_evidence(
     )
     db.add(audit)
     await db.flush()
+    await db.refresh(judgment)
 
     return judgment
 

@@ -52,9 +52,9 @@ def resolve_deadline(text: str, base_date: datetime) -> datetime:
     }
     months_regex_str = r"(january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|oct|nov|dec)"
 
-    # --- Pattern A1: "by DD Month YYYY" (e.g. "by 31 March 2025") ---
+    # --- Pattern A1: "by DD Month YYYY" (e.g. "by 31st March 2025") ---
     match_a1 = re.search(
-        rf"by\s+(\d{{1,2}})\s+{months_regex_str}\s+(\d{{4}})",
+        rf"by\s+(\d{{1,2}})(?:st|nd|rd|th)?\s+{months_regex_str}\s+(\d{{4}})",
         text,
         re.IGNORECASE
     )
@@ -66,9 +66,9 @@ def resolve_deadline(text: str, base_date: datetime) -> datetime:
         if month:
             return datetime(year, month, day, tzinfo=base_date.tzinfo)
 
-    # --- Pattern A2: "by Month DD, YYYY" (e.g. "by March 31, 2025") ---
+    # --- Pattern A2: "by Month DD, YYYY" (e.g. "by March 31st, 2025") ---
     match_a2 = re.search(
-        rf"by\s+{months_regex_str}\s+(\d{{1,2}}),?\s+(\d{{4}})",
+        rf"by\s+{months_regex_str}\s+(\d{{1,2}})(?:st|nd|rd|th)?,?\s+(\d{{4}})",
         text,
         re.IGNORECASE
     )
@@ -141,6 +141,28 @@ def resolve_deadline(text: str, base_date: datetime) -> datetime:
                     base_date.year + 1, month, day, tzinfo=base_date.tzinfo
                 )
             return candidate
+
+    # --- Pattern E1: Numeric "by DD/MM/YYYY" or "by DD-MM-YYYY" or "by DD.MM.YYYY" ---
+    numeric_match = re.search(r"by\s+(\d{1,2})[/\-\.](\d{1,2})[/\-\.](\d{4})", text, re.IGNORECASE)
+    if numeric_match:
+        day = int(numeric_match.group(1))
+        month = int(numeric_match.group(2))
+        year = int(numeric_match.group(3))
+        try:
+            return datetime(year, month, day, tzinfo=base_date.tzinfo)
+        except ValueError:
+            pass
+
+    # --- Pattern E2: Numeric "by YYYY-MM-DD" ---
+    iso_match = re.search(r"by\s+(\d{4})[/\-\.](\d{1,2})[/\-\.](\d{1,2})", text, re.IGNORECASE)
+    if iso_match:
+        year = int(iso_match.group(1))
+        month = int(iso_match.group(2))
+        day = int(iso_match.group(3))
+        try:
+            return datetime(year, month, day, tzinfo=base_date.tzinfo)
+        except ValueError:
+            pass
 
     # --- Fallback: 90 days from base_date ---
     return base_date + timedelta(days=90)

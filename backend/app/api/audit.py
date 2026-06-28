@@ -109,14 +109,7 @@ _CSV_COLUMNS = [
 ]
 
 
-async def _csv_stream(
-    db: AsyncSession,
-    *,
-    event_type: str | None,
-    entity_type: str | None,
-    entity_id: str | None,
-    actor: str | None,
-) -> AsyncGenerator[str, None]:
+async def _csv_stream(rows) -> AsyncGenerator[str, None]:
     """Yield CSV rows as string chunks."""
 
     # header
@@ -126,18 +119,7 @@ async def _csv_stream(
     yield buf.getvalue()
 
     # data
-    stmt = select(AuditLog)
-    stmt = _apply_filters(
-        stmt,
-        event_type=event_type,
-        entity_type=entity_type,
-        entity_id=entity_id,
-        actor=actor,
-    )
-    stmt = stmt.order_by(desc(AuditLog.created_at))
-
-    result = await db.execute(stmt)
-    for row in result.scalars():
+    for row in rows:
         buf = io.StringIO()
         writer = csv.writer(buf)
         writer.writerow(
@@ -166,15 +148,21 @@ async def export_audit_logs(
     db: AsyncSession = Depends(get_db),
 ) -> StreamingResponse:
     """Export the full (filtered) audit log as a downloadable CSV file."""
+    stmt = select(AuditLog)
+    stmt = _apply_filters(
+        stmt,
+        event_type=event_type,
+        entity_type=entity_type,
+        entity_id=entity_id,
+        actor=actor,
+    )
+    stmt = stmt.order_by(desc(AuditLog.created_at))
+
+    result = await db.execute(stmt)
+    rows = list(result.scalars().all())
 
     return StreamingResponse(
-        _csv_stream(
-            db,
-            event_type=event_type,
-            entity_type=entity_type,
-            entity_id=entity_id,
-            actor=actor,
-        ),
+        _csv_stream(rows),
         media_type="text/csv",
         headers={
             "Content-Disposition": "attachment; filename=audit_log_export.csv"

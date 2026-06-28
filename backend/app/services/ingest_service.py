@@ -84,7 +84,8 @@ async def ingest_from_url(url: str, db: AsyncSession) -> Circular:
     Raises:
         ValueError: If a circular with the same content hash already exists.
     """
-    raw_text = parse_url(url)
+    import asyncio
+    raw_text = await asyncio.to_thread(parse_url, url)
     return await _persist_circular(raw_text, source_url=url, db=db)
 
 
@@ -92,7 +93,8 @@ async def ingest_from_upload(
     filename: str, data: bytes, db: AsyncSession
 ) -> Circular:
     """Ingest a regulatory circular from an uploaded PDF file."""
-    raw_text = parse_pdf_bytes(data)
+    import asyncio
+    raw_text = await asyncio.to_thread(parse_pdf_bytes, data)
     return await _persist_circular(raw_text, source_url=None, db=db)
 
 async def run_ingestion_pipeline(circular_id: str, db_factory):
@@ -122,14 +124,24 @@ async def run_ingestion_pipeline(circular_id: str, db_factory):
         except Exception as exc:
             import logging
             logging.getLogger(__name__).exception("Ingestion pipeline failed for %s", circular_id)
-            circular.status = "failed"
-            audit = AuditLog(
-                event_type="ingestion_failed",
-                entity_type="circular",
-                entity_id=str(circular.id),
-                payload={"error": str(exc)},
-                actor="system",
-            )
-            db.add(audit)
-            await db.commit()
+            try:
+                await db.rollback()
+            except Exception:
+                pass
+
+            # Use a fresh connection to write the failure state safely
+            async with db_factory() as fail_db:
+                result = await fail_db.execute(select(Circular).where(Circular.id == circular_id))
+                fail_circ = result.scalar_one_or_none()
+                if fail_circ:
+                    fail_circ.status = "failed"
+                    audit = AuditLog(
+                        event_type="ingestion_failed",
+                        entity_type="circular",
+                        entity_id=str(fail_circ.id),
+                        payload={"error": str(exc)},
+                        actor="system",
+                    )
+                    fail_db.add(audit)
+                    await fail_db.commit()
             raise

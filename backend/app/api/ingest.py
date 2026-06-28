@@ -1,5 +1,4 @@
-"""Ingest API router — URL and file upload endpoints for regulatory circulars."""
-
+from uuid import UUID
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, BackgroundTasks
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -72,7 +71,7 @@ async def ingest_upload_endpoint(
 
 @router.get("/status/{job_id}")
 async def get_ingest_status(
-    job_id: str,
+    job_id: UUID,
     db: AsyncSession = Depends(get_db),
 ):
     """Check the status of a background ingestion job."""

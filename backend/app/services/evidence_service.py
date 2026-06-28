@@ -60,8 +60,10 @@ async def submit_evidence(
     object_key = f"evidence/{map_id}/{uuid4()}/{file_name}"
 
     # Upload to MinIO
+    import asyncio
     data_stream = io.BytesIO(file_data)
-    minio_client.put_object(
+    await asyncio.to_thread(
+        minio_client.put_object,
         bucket_name=settings.MINIO_BUCKET,
         object_name=object_key,
         data=data_stream,
@@ -106,12 +108,12 @@ async def get_maps_for_department(
     department: str, db: AsyncSession
 ) -> list[MapItem]:
     """Return all non-satisfied and non-split MAPs for a department, ordered by deadline."""
-    parent_ids_subq = select(MapItem.parent_map_id).where(MapItem.parent_map_id.isnot(None))
+    parent_ids_subq = select(MapItem.parent_map_id).where(MapItem.parent_map_id.is_not(None))
     result = await db.execute(
         select(MapItem)
         .where(MapItem.department == department)
         .where(MapItem.status != "satisfied")
-        .where(MapItem.id.not_in(parent_ids_subq))
+        .where(MapItem.id.notin_(parent_ids_subq))
         .order_by(MapItem.deadline.asc())
     )
     return list(result.scalars().all())
@@ -128,13 +130,13 @@ async def check_and_escalate_overdue(db: AsyncSession) -> int:
     """
     now = datetime.now(timezone.utc)
     escalatable = ("assigned", "evidence_submitted", "partial")
-    parent_ids_subq = select(MapItem.parent_map_id).where(MapItem.parent_map_id.isnot(None))
+    parent_ids_subq = select(MapItem.parent_map_id).where(MapItem.parent_map_id.is_not(None))
 
     result = await db.execute(
         select(MapItem).where(
             MapItem.deadline < now,
             MapItem.status.in_(escalatable),
-            MapItem.id.not_in(parent_ids_subq),
+            MapItem.id.notin_(parent_ids_subq),
         )
     )
     overdue_maps = list(result.scalars().all())
