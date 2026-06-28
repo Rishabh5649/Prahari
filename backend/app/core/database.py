@@ -7,15 +7,13 @@ from sqlalchemy.orm import DeclarativeBase
 
 from app.core.config import settings
 
-import ssl
-ssl_context = ssl.create_default_context()
-ssl_context.check_hostname = False
-ssl_context.verify_mode = ssl.CERT_NONE
+# Only pass SSL connect_args for asyncpg (Postgres) — not for SQLite used in tests
+_connect_args = {"ssl": True} if settings.DATABASE_URL.startswith("postgresql+asyncpg") else {}
 
 engine = create_async_engine(
     settings.DATABASE_URL,
     echo=False,
-    connect_args={"ssl": ssl_context},
+    connect_args=_connect_args,
 )
 
 async_session_factory = async_sessionmaker(

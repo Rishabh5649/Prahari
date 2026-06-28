@@ -38,16 +38,39 @@ async def _overdue_checker() -> None:
             logger.exception("Overdue checker failed")
 
 
+async def _run_migrations() -> None:
+    """Run alembic upgrade head programmatically on startup."""
+    import asyncio
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "alembic", "upgrade", "head",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, stderr = await proc.communicate()
+        if proc.returncode == 0:
+            logger.info("Alembic migrations applied successfully")
+        else:
+            logger.warning(
+                "Alembic migrations failed (exit %d) — server will still start.\n%s",
+                proc.returncode,
+                stderr.decode(),
+            )
+    except Exception:
+        logger.exception("Could not run alembic migrations — server will still start")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Startup / shutdown lifecycle hook.
 
     Startup:
+        - Runs Alembic migrations (non-fatal if they fail).
         - Ensures the MinIO evidence bucket exists.
         - Launches periodic overdue-escalation background task.
-        - Tables are managed via Alembic migrations (run ``alembic upgrade head``).
     """
     # --- Startup ---
+    await _run_migrations()
     ensure_bucket_exists()
     overdue_task = asyncio.create_task(_overdue_checker())
     yield
