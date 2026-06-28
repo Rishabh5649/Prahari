@@ -12,8 +12,8 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { getAuditLogs } from '@/api/audit';
+import { BASE_URL } from '@/api/client';
 
-const BASE_URL = 'http://localhost:8000';
 const PAGE_SIZE = 50;
 
 function CopyButton({ text }) {
