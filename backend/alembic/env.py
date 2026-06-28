@@ -50,16 +50,16 @@ def do_run_migrations(connection) -> None:
 
 async def run_async_migrations() -> None:
     """Run migrations in 'online' mode with async engine."""
-    from app.core.database import _db_url, _engine_kwargs
+    from sqlalchemy.ext.asyncio import create_async_engine
+    import ssl
+    ssl_context = ssl.create_default_context()
+    ssl_context.check_hostname = False
+    ssl_context.verify_mode = ssl.CERT_NONE
 
-    ini_section = config.get_section(config.config_ini_section, {})
-    ini_section["sqlalchemy.url"] = _db_url
-
-    connectable = async_engine_from_config(
-        ini_section,
-        prefix="sqlalchemy.",
+    connectable = create_async_engine(
+        settings.DATABASE_URL,
         poolclass=pool.NullPool,
-        **_engine_kwargs,
+        connect_args={"ssl": ssl_context},
     )
 
     async with connectable.connect() as connection:
