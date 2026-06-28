@@ -1,7 +1,7 @@
 """Add 'queued' and 'failed' values to circular_status enum.
 
 Revision ID: 0003_add_queued_failed
-Revises: 0002_add_rejected
+Revises: 9aff473cd4a6
 Create Date: 2026-06-27
 """
 from typing import Sequence, Union
@@ -10,7 +10,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "0003_add_queued_failed"
-down_revision: Union[str, None] = "9aff473cd4a6_constrain_department_enum"  # Correcting based on files found
+down_revision: Union[str, None] = "9aff473cd4a6"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

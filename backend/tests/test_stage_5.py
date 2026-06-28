@@ -16,6 +16,7 @@ from app.models.circular import Circular
 from app.models.evidence import EvidenceSubmission
 from app.models.judgment import Judgment
 from app.models.map_item import MapItem
+from app.core.config import settings
 
 
 # ---------------------------------------------------------------------------
@@ -157,8 +158,8 @@ def test_judge_evidence_creates_judgment():
         mock_response.release_conn = MagicMock()
         mock_minio.get_object.return_value = mock_response
 
-        with patch("app.agents.judge_agent._call_anthropic", new_callable=AsyncMock) as mock_claude:
-            mock_claude.return_value = mock_llm_response
+        with patch("app.agents.judge_agent._call_gemini", new_callable=AsyncMock) as mock_gemini:
+            mock_gemini.return_value = mock_llm_response
             judgment = await judge_evidence(m, e, db)
 
         assert judgment.verdict == "satisfied"
@@ -177,7 +178,7 @@ def test_judge_evidence_creates_judgment():
         )
         audit = result.scalar_one()
         assert audit.entity_type == "judgment"
-        assert audit.model_version == "claude-3-5-sonnet-20240620"
+        assert audit.model_version == settings.MODEL
         payload = audit.payload
         assert payload["verdict"] == "satisfied"
         assert payload["evidence_id"] == str(e.id)
@@ -263,8 +264,8 @@ def test_api_judge_happy_path():
         mock_response.release_conn = MagicMock()
         mock_minio.get_object.return_value = mock_response
 
-        with patch("app.agents.judge_agent._call_anthropic", new_callable=AsyncMock) as mock_claude:
-            mock_claude.return_value = mock_llm_response
+        with patch("app.agents.judge_agent._call_gemini", new_callable=AsyncMock) as mock_gemini:
+            mock_gemini.return_value = mock_llm_response
             resp = await client.post(
                 f"/api/judgments/{m.id}/judge",
                 json={"evidence_id": str(e.id)},
@@ -492,7 +493,7 @@ def test_api_audit_export_csv():
             payload={"verdict": "satisfied"},
             input_hash="abc",
             output_hash="def",
-            model_version="claude-3-5-sonnet-20240620",
+            model_version=settings.MODEL,
             actor="system",
         )
         db.add(audit)

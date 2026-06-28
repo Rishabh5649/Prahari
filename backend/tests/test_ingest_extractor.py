@@ -25,11 +25,11 @@ def test_duplicate_detection(mock_parse_url, mock_extract_title):
             
     run_test_in_db(async_test)
 
-@patch("app.agents.extractor_agent._call_anthropic")
-def test_extractor_agent(mock_anthropic):
+@patch("app.agents.extractor_agent._call_gemini")
+def test_extractor_agent(mock_gemini):
     async def async_test(session):
         # Mock LLM response
-        mock_anthropic.return_value = [
+        mock_gemini.return_value = [
             {
                 "what": "Requirement 1",
                 "deadline_text": "by 31 Dec 2025",

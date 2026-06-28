@@ -5,7 +5,7 @@ import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.audit import router as audit_router
@@ -14,6 +14,7 @@ from app.api.evidence import router as evidence_router
 from app.api.ingest import router as ingest_router
 from app.api.judgments import router as judgments_router
 from app.api.maps import router as maps_router
+from app.api.deps import verify_api_key
 from app.core.database import async_session_factory
 from app.core.minio_client import ensure_bucket_exists
 from app.services.evidence_service import check_and_escalate_overdue
@@ -88,12 +89,12 @@ app.add_middleware(
 # ---------------------------------------------------------------------------
 # Routers
 # ---------------------------------------------------------------------------
-app.include_router(ingest_router)
-app.include_router(maps_router)
-app.include_router(evidence_router)
-app.include_router(judgments_router)
-app.include_router(audit_router)
-app.include_router(dashboard_router)
+app.include_router(ingest_router, dependencies=[Depends(verify_api_key)])
+app.include_router(maps_router, dependencies=[Depends(verify_api_key)])
+app.include_router(evidence_router, dependencies=[Depends(verify_api_key)])
+app.include_router(judgments_router, dependencies=[Depends(verify_api_key)])
+app.include_router(audit_router, dependencies=[Depends(verify_api_key)])
+app.include_router(dashboard_router, dependencies=[Depends(verify_api_key)])
 
 
 @app.get("/health")

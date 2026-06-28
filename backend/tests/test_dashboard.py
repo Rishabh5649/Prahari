@@ -254,14 +254,17 @@ def test_dashboard_stats():
     """GET /api/dashboard/stats returns correct aggregate counts."""
 
     async def _test(client, db):
-        # Seed 2 circulars
+        # Seed 3 circulars (one compliant, one overdue, one failed)
         c1 = Circular(
             source_hash="stats1", raw_text="C1", status="compliant", title="C1",
         )
         c2 = Circular(
             source_hash="stats2", raw_text="C2", status="overdue", title="C2",
         )
-        db.add_all([c1, c2])
+        c3 = Circular(
+            source_hash="stats3", raw_text="C3", status="failed", title="C3",
+        )
+        db.add_all([c1, c2, c3])
         await db.flush()
 
         now = datetime.now(timezone.utc)
@@ -283,9 +286,10 @@ def test_dashboard_stats():
         resp = await client.get("/api/dashboard/stats")
         assert resp.status_code == 200
         data = resp.json()
-        assert data["total_circulars"] == 2
+        assert data["total_circulars"] == 3
         assert data["compliant_circulars"] == 1
         assert data["overdue_circulars"] == 1
+        assert data["failed_circulars"] == 1
         assert data["total_maps"] == 3
         assert data["maps_pending_review"] == 1
         assert data["maps_satisfied"] == 1

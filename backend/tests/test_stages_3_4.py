@@ -97,18 +97,16 @@ def test_route_map_two_way_tie_split():
     run_test_in_db(run)
 
 
-@patch("app.services.routing_service.anthropic.AsyncAnthropic")
-def test_route_map_llm_fallback(mock_anthropic_class):
-    """Test routing with no keyword matches falling back to Claude."""
-    # Setup mock Anthropic client
+@patch("app.services.routing_service.genai.Client")
+def test_route_map_llm_fallback(mock_genai_client_class):
+    """Test routing with no keyword matches falling back to Gemini."""
+    # Setup mock GenAI client
     mock_client = MagicMock()
-    mock_anthropic_class.return_value = mock_client
+    mock_genai_client_class.return_value = mock_client
     
-    mock_message = MagicMock()
-    mock_message.content = [
-        MagicMock(text='{"department": "Risk", "reason": "Operational risk review required"}')
-    ]
-    mock_client.messages.create = AsyncMock(return_value=mock_message)
+    mock_response = MagicMock()
+    mock_response.text = '{"department": "Risk", "reason": "Operational risk review required"}'
+    mock_client.aio.models.generate_content = AsyncMock(return_value=mock_response)
 
     async def run(db_session):
         circular = Circular(source_hash="hash3", raw_text="No keywords match here")
@@ -138,6 +136,48 @@ def test_route_map_llm_fallback(mock_anthropic_class):
         assert audit is not None
         assert audit.payload["department"] == "Risk"
         assert audit.payload["reason"] == "Operational risk review required"
+
+    run_test_in_db(run)
+
+
+@patch("app.services.routing_service.genai.Client")
+def test_route_map_three_way_tie_llm_fallback(mock_genai_client_class):
+    """Test that a three-way keyword tie triggers LLM fallback routing."""
+    mock_client = MagicMock()
+    mock_genai_client_class.return_value = mock_client
+    
+    mock_response = MagicMock()
+    mock_response.text = '{"department": "Treasury", "reason": "3-way tie resolved by LLM"}'
+    mock_client.aio.models.generate_content = AsyncMock(return_value=mock_response)
+
+    async def run(db_session):
+        circular = Circular(source_hash="hash3_tie", raw_text="Three way tie text")
+        db_session.add(circular)
+        await db_session.flush()
+
+        map_item = MapItem(
+            circular_id=circular.id,
+            what="encryption KYC ATM",  # Matches IT-Security, KYC/AML, Retail Banking (3-way tie)
+            deadline=datetime.now(timezone.utc) + timedelta(days=30),
+            department="Legal",
+            evidence_type="Tie break files",
+            confidence_score=0.8,
+            status="assigned",
+        )
+        db_session.add(map_item)
+        await db_session.flush()
+
+        routed = await route_map(map_item, db_session)
+        assert routed.department == "Treasury"
+
+        # Verify fallback audit log
+        result = await db_session.execute(
+            select(AuditLog).where(AuditLog.event_type == "map_routed_llm_fallback")
+        )
+        audit = result.scalars().first()
+        assert audit is not None
+        assert audit.payload["department"] == "Treasury"
+        assert audit.payload["reason"] == "Multi-way tie fallback: 3-way tie resolved by LLM"
 
     run_test_in_db(run)
 
@@ -413,5 +453,76 @@ def test_api_invalid_circular_id_format():
         response = await client.get("/api/maps?circular_id=not-a-valid-uuid")
         assert response.status_code == 422
         
+    run_test_with_client(run)
+
+
+def test_validate_upload_unsupported_type():
+    """Test that validate_upload rejects unsupported content types with 415."""
+    async def run(client, db_session):
+        # Seed a map item
+        circular = Circular(source_hash="hash_upload_type", raw_text="text")
+        db_session.add(circular)
+        await db_session.flush()
+
+        map_item = MapItem(
+            circular_id=circular.id,
+            what="Action item for upload",
+            deadline=datetime.now(timezone.utc) + timedelta(days=10),
+            department="KYC/AML",
+            evidence_type="Audit report",
+            confidence_score=0.88,
+            status="assigned",
+        )
+        db_session.add(map_item)
+        await db_session.flush()
+
+        # Submit an evidence upload with wrong content-type
+        files = {
+            "file": ("test.jpg", b"jpeg bytes", "image/jpeg")
+        }
+        data = {
+            "map_id": str(map_item.id),
+            "submitted_by": "officer1@bank.com"
+        }
+        response = await client.post("/api/evidence/submit", data=data, files=files)
+        assert response.status_code == 415
+        assert "Unsupported file type" in response.json()["detail"]
+
+    run_test_with_client(run)
+
+
+def test_validate_upload_too_large():
+    """Test that validate_upload rejects files > 20MB with 413."""
+    async def run(client, db_session):
+        # Seed a map item
+        circular = Circular(source_hash="hash_upload_large", raw_text="text")
+        db_session.add(circular)
+        await db_session.flush()
+
+        map_item = MapItem(
+            circular_id=circular.id,
+            what="Action item for large upload",
+            deadline=datetime.now(timezone.utc) + timedelta(days=10),
+            department="KYC/AML",
+            evidence_type="Audit report",
+            confidence_score=0.88,
+            status="assigned",
+        )
+        db_session.add(map_item)
+        await db_session.flush()
+
+        # Submit an evidence upload > 20MB
+        large_bytes = b"a" * (20 * 1024 * 1024 + 1)
+        files = {
+            "file": ("test.pdf", large_bytes, "application/pdf")
+        }
+        data = {
+            "map_id": str(map_item.id),
+            "submitted_by": "officer1@bank.com"
+        }
+        response = await client.post("/api/evidence/submit", data=data, files=files)
+        assert response.status_code == 413
+        assert "File too large" in response.json()["detail"]
+
     run_test_with_client(run)
 

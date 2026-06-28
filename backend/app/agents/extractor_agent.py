@@ -4,7 +4,8 @@ import json
 import logging
 from datetime import datetime, timedelta, timezone
 
-import anthropic
+from google import genai
+from google.genai import types
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -69,8 +70,8 @@ def _build_user_message(circular: Circular) -> str:
     )
 
 
-async def _call_anthropic(user_message: str, retry: bool = False) -> list[dict]:
-    """Call the Anthropic API and parse the JSON response.
+async def _call_gemini(user_message: str, retry: bool = False) -> list[dict]:
+    """Call the Gemini API and parse the JSON response.
 
     Args:
         user_message: The user-role message containing the circular text.
@@ -79,18 +80,19 @@ async def _call_anthropic(user_message: str, retry: bool = False) -> list[dict]:
     Returns:
         Parsed list of MAP dictionaries.
     """
-    client = anthropic.AsyncAnthropic(api_key=settings.ANTHROPIC_API_KEY)
+    client = genai.Client(api_key=settings.GEMINI_API_KEY)
 
     system = SYSTEM_PROMPT if not retry else SYSTEM_PROMPT + RETRY_SUFFIX
 
-    response = await client.messages.create(
+    response = await client.aio.models.generate_content(
         model=settings.MODEL,
-        max_tokens=4096,
-        system=system,
-        messages=[{"role": "user", "content": user_message}],
+        contents=user_message,
+        config=types.GenerateContentConfig(
+            system_instruction=system,
+        ),
     )
 
-    raw_text = response.content[0].text.strip()
+    raw_text = response.text.strip()
 
     # Handle responses wrapped in markdown code fences
     if raw_text.startswith("```"):
@@ -132,10 +134,10 @@ async def extract_maps(
 
     # First attempt
     try:
-        maps_data = await _call_anthropic(user_message)
+        maps_data = await _call_gemini(user_message)
     except (json.JSONDecodeError, Exception) as exc:
         logger.warning("First LLM call failed (%s), retrying with stricter prompt…", exc)
-        maps_data = await _call_anthropic(user_message, retry=True)
+        maps_data = await _call_gemini(user_message, retry=True)
 
     map_items: list[MapItem] = []
     pending_count = 0

@@ -9,7 +9,8 @@ import json
 import logging
 from io import BytesIO
 
-import anthropic
+from google import genai
+from google.genai import types
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -94,8 +95,8 @@ async def _extract_evidence_text(evidence: EvidenceSubmission) -> str:
         return f"[Error reading evidence file: {str(e)}]"
 
 
-async def _call_anthropic(user_message: str, retry: bool = False) -> dict:
-    """Call the Anthropic API and parse the JSON response.
+async def _call_gemini(user_message: str, retry: bool = False) -> dict:
+    """Call the Gemini API and parse the JSON response.
 
     Args:
         user_message: The user-role message containing requirement and evidence.
@@ -104,18 +105,19 @@ async def _call_anthropic(user_message: str, retry: bool = False) -> dict:
     Returns:
         Parsed verdict dictionary with verdict, reasoning, and gaps.
     """
-    client = anthropic.AsyncAnthropic(api_key=settings.ANTHROPIC_API_KEY)
+    client = genai.Client(api_key=settings.GEMINI_API_KEY)
 
     system = SYSTEM_PROMPT if not retry else SYSTEM_PROMPT + RETRY_SUFFIX
 
-    response = await client.messages.create(
+    response = await client.aio.models.generate_content(
         model=settings.MODEL,
-        max_tokens=2048,
-        system=system,
-        messages=[{"role": "user", "content": user_message}],
+        contents=user_message,
+        config=types.GenerateContentConfig(
+            system_instruction=system,
+        ),
     )
 
-    raw_text = response.content[0].text.strip()
+    raw_text = response.text.strip()
 
     # Handle responses wrapped in markdown code fences
     if raw_text.startswith("```"):
@@ -189,12 +191,12 @@ async def judge_evidence(
 
     # First attempt
     try:
-        verdict_data = await _call_anthropic(user_message)
+        verdict_data = await _call_gemini(user_message)
     except (json.JSONDecodeError, Exception) as exc:
         logger.warning(
             "First judge LLM call failed (%s), retrying with stricter prompt…", exc
         )
-        verdict_data = await _call_anthropic(user_message, retry=True)
+        verdict_data = await _call_gemini(user_message, retry=True)
 
     verdict = verdict_data["verdict"]
     reasoning = verdict_data["reasoning"]

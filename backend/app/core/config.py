@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "postgresql+asyncpg://prahari:prahari@localhost:5432/prahari"
     ANTHROPIC_API_KEY: str = ""
     GEMINI_API_KEY: str = ""
-    MODEL: str = "claude-3-5-sonnet-20240620"
+    MODEL: str = "gemini-2.5-flash"
     MINIO_ENDPOINT: str = "localhost:9000"
     MINIO_ACCESS_KEY: str = "minioadmin"
     MINIO_SECRET_KEY: str = "minioadmin"

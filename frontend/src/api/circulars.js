@@ -15,3 +15,9 @@ export async function ingestFile(file) {
   });
   return response.data;
 }
+
+export async function getIngestStatus(jobId) {
+  const response = await client.get(`/api/ingest/status/${jobId}`);
+  return response.data;
+}
+

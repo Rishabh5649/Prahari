@@ -1,5 +1,13 @@
 """Pytest configuration and helpers without pytest-asyncio dependency."""
 
+import os
+# Override environment variables for config loading BEFORE any app code is imported
+os.environ["DATABASE_URL"] = "sqlite+aiosqlite:///:memory:"
+os.environ["MINIO_ENDPOINT"] = "localhost:9000"
+os.environ["MINIO_ACCESS_KEY"] = "mock"
+os.environ["MINIO_SECRET_KEY"] = "mock"
+os.environ["MINIO_BUCKET"] = "mock-bucket"
+
 import asyncio
 from unittest.mock import MagicMock, patch
 
@@ -29,14 +37,6 @@ patcher_minio = patch("app.core.minio_client.minio_client", mock_minio)
 patcher_minio_ensure = patch("app.core.minio_client.ensure_bucket_exists", MagicMock())
 patcher_minio.start()
 patcher_minio_ensure.start()
-
-# Override environment variables for config loading
-import os
-os.environ["DATABASE_URL"] = "sqlite+aiosqlite:///:memory:"
-os.environ["MINIO_ENDPOINT"] = "localhost:9000"
-os.environ["MINIO_ACCESS_KEY"] = "mock"
-os.environ["MINIO_SECRET_KEY"] = "mock"
-os.environ["MINIO_BUCKET"] = "mock-bucket"
 
 # Import app code
 from app.core.database import Base, get_db

@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { ingestUrl, ingestFile } from '@/api/circulars';
+import { ingestUrl, ingestFile, getIngestStatus } from '@/api/circulars';
+import { getCircularDetail } from '@/api/dashboard';
 
 export default function IngestPage() {
   const [url, setUrl] = useState('');
@@ -11,22 +12,89 @@ export default function IngestPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [result, setResult] = useState(null); // { id, title, total_maps, pending_review }
+  const [statusProgress, setStatusProgress] = useState('');
+  const pollIntervalRef = useRef(null);
+
+
+  useEffect(() => {
+    return () => {
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+      }
+    };
+  }, []);
+
+  const startPolling = (jobId) => {
+    if (pollIntervalRef.current) {
+      clearInterval(pollIntervalRef.current);
+    }
+    setStatusProgress('queued');
+    pollIntervalRef.current = setInterval(async () => {
+      try {
+        const statusData = await getIngestStatus(jobId);
+        setStatusProgress(statusData.status);
+        if (statusData.status === 'in_progress') {
+          if (pollIntervalRef.current) {
+            clearInterval(pollIntervalRef.current);
+            pollIntervalRef.current = null;
+          }
+          const circularDetail = await getCircularDetail(jobId);
+          setResult({
+            id: jobId,
+            title: circularDetail.title || 'Ingested Circular',
+            total_maps: circularDetail.maps ? circularDetail.maps.length : 0,
+            pending_review: circularDetail.maps ? circularDetail.maps.filter(m => m.status === 'pending_review').length : 0
+          });
+          setLoading(false);
+        } else if (statusData.status === 'failed') {
+          if (pollIntervalRef.current) {
+            clearInterval(pollIntervalRef.current);
+            pollIntervalRef.current = null;
+          }
+          setError("Ingestion pipeline failed. Check backend logs or try again.");
+          setLoading(false);
+        }
+      } catch (err) {
+        if (pollIntervalRef.current) {
+          clearInterval(pollIntervalRef.current);
+          pollIntervalRef.current = null;
+        }
+        const detail = err.response?.data?.detail;
+        const errorMsg = typeof detail === 'string'
+          ? detail
+          : (Array.isArray(detail)
+              ? detail.map((x) => x.msg).join(', ')
+              : 'Failed to poll ingestion status.');
+        setError(errorMsg);
+        setLoading(false);
+      }
+    }, 2000);
+  };
 
   const handleUrlSubmit = async (e) => {
     e.preventDefault();
     if (!url) return;
+    if (pollIntervalRef.current) {
+      clearInterval(pollIntervalRef.current);
+      pollIntervalRef.current = null;
+    }
     setLoading(true);
     setError('');
     setResult(null);
+    let keepLoading = false;
     try {
       const data = await ingestUrl(url);
-      setResult({
-        id: data.circular_id,
-        title: 'Ingested Circular',
-        total_maps: data.maps_extracted || 0,
-        pending_review: data.pending_review || 0,
-      });
-      setUrl('');
+      if (data.job_id) {
+        keepLoading = true;
+        startPolling(data.job_id);
+      } else {
+        setResult({
+          id: data.circular_id,
+          title: 'Ingested Circular',
+          total_maps: data.maps_extracted || 0,
+          pending_review: data.pending_review || 0,
+        });
+      }
     } catch (err) {
       const detail = err.response?.data?.detail;
       const errorMsg = typeof detail === 'string'
@@ -37,27 +105,42 @@ export default function IngestPage() {
       setError(errorMsg);
     } finally {
       setUrl('');
-      setLoading(false);
+      if (!keepLoading) {
+        setLoading(false);
+      }
     }
   };
 
   const handleFileSubmit = async (e) => {
     e.preventDefault();
     if (!file) return;
+    if (pollIntervalRef.current) {
+      clearInterval(pollIntervalRef.current);
+      pollIntervalRef.current = null;
+    }
     setLoading(true);
     setError('');
     setResult(null);
+    let keepLoading = false;
     try {
       const data = await ingestFile(file);
-      setResult({
-        id: data.circular_id,
-        title: file.name || 'Uploaded Circular',
-        total_maps: data.maps_extracted || 0,
-        pending_review: data.pending_review || 0,
-      });
+      if (data.job_id) {
+        keepLoading = true;
+        startPolling(data.job_id);
+      } else {
+        setResult({
+          id: data.circular_id,
+          title: file.name || 'Uploaded Circular',
+          total_maps: data.maps_extracted || 0,
+          pending_review: data.pending_review || 0,
+        });
+      }
       setFile(null);
       // Reset input element
-      document.getElementById('pdf-file-input').value = '';
+      const fileInput = document.getElementById('pdf-file-input');
+      if (fileInput) {
+        fileInput.value = '';
+      }
     } catch (err) {
       const detail = err.response?.data?.detail;
       const errorMsg = typeof detail === 'string'
@@ -67,9 +150,12 @@ export default function IngestPage() {
             : 'Failed to upload and process PDF file.');
       setError(errorMsg);
     } finally {
-      setLoading(false);
+      if (!keepLoading) {
+        setLoading(false);
+      }
     }
   };
+
 
   return (
     <div className="max-w-2xl mx-auto space-y-6 py-6 px-4">
@@ -86,6 +172,11 @@ export default function IngestPage() {
             <div className="w-8 h-8 border-4 border-zinc-900 border-t-transparent rounded-full animate-spin"></div>
             <p className="text-sm font-medium text-zinc-800">Processing circular...</p>
             <p className="text-xs text-zinc-500">Parsing document structure and running extractor agent...</p>
+            {statusProgress && (
+              <p className="text-xs font-semibold text-zinc-600 capitalize">
+                Status: {statusProgress.replace('_', ' ')}
+              </p>
+            )}
           </CardContent>
         </Card>
       )}

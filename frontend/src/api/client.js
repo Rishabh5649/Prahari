@@ -4,6 +4,9 @@ export const BASE_URL = 'http://localhost:8000';
 
 const client = axios.create({
   baseURL: BASE_URL,
+  headers: {
+    'X-API-Key': import.meta.env.VITE_API_KEY || '',
+  },
 });
 
 // ── Global error state ──

@@ -5,7 +5,7 @@ import json
 import logging
 import re
 
-import anthropic
+from google import genai
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -67,12 +67,12 @@ def _score_departments(text: str) -> dict[str, int]:
 
 
 async def _llm_fallback(map_item: MapItem) -> tuple[str, str]:
-    """Use Claude to determine the responsible department.
+    """Use Gemini to determine the responsible department.
 
     Returns:
         Tuple of (department, reason).
     """
-    client = anthropic.AsyncAnthropic(api_key=settings.ANTHROPIC_API_KEY)
+    client = genai.Client(api_key=settings.GEMINI_API_KEY)
 
     system = (
         "You are a bank org chart specialist. Given a compliance action item, "
@@ -88,13 +88,15 @@ async def _llm_fallback(map_item: MapItem) -> tuple[str, str]:
     )
 
     try:
-        response = await client.messages.create(
+        from google.genai import types
+        response = await client.aio.models.generate_content(
             model=settings.MODEL,
-            max_tokens=256,
-            system=system,
-            messages=[{"role": "user", "content": user_msg}],
+            contents=user_msg,
+            config=types.GenerateContentConfig(
+                system_instruction=system,
+            ),
         )
-        raw = response.content[0].text.strip()
+        raw = response.text.strip()
         parsed = json.loads(raw)
         dept = parsed["department"]
         reason = parsed.get("reason", "")
