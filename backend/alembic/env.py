@@ -52,13 +52,14 @@ async def run_async_migrations() -> None:
     """Run migrations in 'online' mode with async engine."""
     from sqlalchemy.ext.asyncio import create_async_engine
 
-    # Only use ssl=True for asyncpg (Postgres); skip for local SQLite
-    connect_args = {"ssl": True} if settings.DATABASE_URL.startswith("postgresql+asyncpg") else {}
+    import ssl
+    ssl_ctx = ssl.create_default_context()
+    ssl_ctx.check_hostname = False
+    ssl_ctx.verify_mode = ssl.CERT_NONE
 
     connectable = create_async_engine(
         settings.DATABASE_URL,
-        poolclass=pool.NullPool,
-        connect_args=connect_args,
+        connect_args={"ssl": ssl_ctx},
     )
 
     async with connectable.connect() as connection:

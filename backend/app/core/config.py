@@ -26,18 +26,15 @@ class Settings(BaseSettings):
     @field_validator("DATABASE_URL", mode="before")
     @classmethod
     def fix_database_url(cls, v: str) -> str:
-        # Fix scheme
-        if v.startswith("postgres://"):
-            v = v.replace("postgres://", "postgresql+asyncpg://", 1)
-        if v.startswith("postgresql://") and "+asyncpg" not in v:
-            v = v.replace("postgresql://", "postgresql+asyncpg://", 1)
-        # Strip sslmode query param — asyncpg ignores it and it
-        # causes warnings; SSL is passed via connect_args instead
-        if "?sslmode=" in v:
-            v = v.split("?sslmode=")[0]
-        if "&sslmode=" in v:
-            v = v.replace("&sslmode=require", "").replace("&sslmode=prefer", "")
-        return v
+        # Strip query params — SSL handled via connect_args
+        base = v.split("?")[0]
+        # Fix scheme for asyncpg
+        if base.startswith("postgres://"):
+            base = base.replace("postgres://", "postgresql+asyncpg://", 1)
+        if base.startswith("postgresql://") and "+asyncpg" not in base:
+            base = base.replace("postgresql://", "postgresql+asyncpg://", 1)
+        return base
+
 
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod
